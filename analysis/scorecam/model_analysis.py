@@ -47,38 +47,9 @@ def analyze_receptive_field(model, input_image, target_layer='bsn.branch1_1.head
 
     # 生成CAM图
     cam_map = score_cam(input_tensor)
-    basic_visualize(input_tensor.cpu(), cam_map.type(torch.FloatTensor).cpu(), save_path='smbsn.png')
+    basic_visualize(input_tensor.cpu(), cam_map.type(torch.FloatTensor).cpu(), save_path='/opt/smbsn.png')
 
     return None, None
-
-def basic_visualize(input_, gradients, save_path=None, cmap='viridis', alpha=0.7):
-    # 确保数据在正确范围内
-    input_ = torch.clamp(input_, 0, 1)  # 限制输入范围在 [0,1]
-    gradients = torch.clamp(gradients, 0, 1)  # 限制梯度范围在 [0,1]
-    
-    # 转换为 numpy 数组
-    input_ = input_.numpy()
-    gradients = gradients.numpy()
-    
-    # 创建图像
-    plt.figure(figsize=(10, 5))
-    
-    # 显示原始图像
-    plt.subplot(121)
-    plt.imshow(input_)
-    plt.axis('off')
-    plt.title('Original Image')
-    
-    # 显示热力图
-    plt.subplot(122)
-    plt.imshow(input_)
-    plt.imshow(gradients, cmap=cmap, alpha=alpha)
-    plt.axis('off')
-    plt.title('Attention Map')
-    
-    plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
 
 if __name__ == '__main__':
     # 示例使用
