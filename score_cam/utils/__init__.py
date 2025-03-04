@@ -133,6 +133,7 @@ def apply_transforms_v0(image, size=224):
     return tensor
 
 
+# 将标准化（normalized）后的图像张量恢复到原始像素值范围
 def denormalize(tensor):
     """Reverses the normalisation on a tensor.
 
