@@ -582,7 +582,6 @@ def find_shufflenet_layer(arch, target_layer_name):
 
     return target_layer
 
-
 def find_layer(arch, target_layer_name):
     """Find target layer to calculate CAM.
 
@@ -594,7 +593,9 @@ def find_layer(arch, target_layer_name):
             - **target_layer - **: Found layer. This layer will be hooked to get forward/backward pass information.
     """
 
-    if target_layer_name.split('_') not in arch._modules.keys():
-        raise Exception("Invalid target layer name.")
-    target_layer = arch._modules[target_layer_name]
-    return target_layer
+    arch_modules_keys = arch._modules.keys()
+    arch_modules_bsn_keys = arch._modules['bsn']
+    # if target_layer_name.split('.')[0] not in arch._modules.keys():
+    #     raise Exception("Invalid target layer name.")
+    target_layer = getattr(arch_modules_bsn_keys, target_layer_name)
+    return target_layer.head[0]

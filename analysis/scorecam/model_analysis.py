@@ -1,11 +1,8 @@
 import torch
-import torch.nn.functional as F
 import cv2
-import numpy as np
 from model.get_model import BSN
-from cam.scorecam import ScoreCAM
-from util.generator import np2tensor, tensor2np
-from score_cam.utils import *
+from analysis.scorecam.scorecam import ScoreCAM
+from analysis.scorecam.utils import *
 
 def load_model(model_path):
     # 加载MMBSN模型
@@ -15,15 +12,12 @@ def load_model(model_path):
     model.eval()
     return model
 
-def analyze_receptive_field(model, input_image, target_layer='bsn.branch1_1.head.0'):
-    # 获取目标层
-    target_module = model
-
-    # 准备模型字典
+def analyze_attention_distribution(model, input_image, target_layer='bsn.branch1_1.head.0'):
+    # 准备模型字典，修改目标层的格式
     model_dict = dict(
         type='custom',
         arch=model,
-        target_layer=target_layer,
+        target_layer=target_layer.replace('.', '_'),  # 将点号替换为下划线
         input_size=(225, 225)
     )
 
@@ -60,39 +54,64 @@ def analyze_receptive_field(model, input_image, target_layer='bsn.branch1_1.head
         print(f"- 均值: {feature_map.mean():.4f}")
         print(f"- 标准差: {feature_map.std():.4f}")
 
-    # 生成CAM图
-    cam_map = score_cam(input_tensor)
-    print(f"CAM图形状: {cam_map.shape}")
+    # 添加CUDA内存清理
+    torch.cuda.empty_cache()
     
-    # 保存原始特征图
+    # 限制处理的特征图数量
+    max_features = 100
+    
+    # 生成CAM图
+    try:
+        with torch.cuda.amp.autocast():  # 使用混合精度计算
+            cam_map = score_cam(input_tensor)
+            print(f"CAM图形状: {cam_map.shape}")
+    except RuntimeError as e:
+        print(f"生成CAM图时出错: {e}")
+        torch.cuda.empty_cache()
+        return None, None
+    finally:
+        # 确保清理GPU内存
+        torch.cuda.empty_cache()
+    
+    # 转移数据到CPU并释放GPU内存
+    cam_map = cam_map.cpu()
+    input_tensor = input_tensor.cpu()
+    model.cpu()
+    
+    # 保存可视化结果
     plt.figure(figsize=(10, 10))
     plt.imshow(feature_map, cmap='viridis')
     plt.colorbar()
     plt.savefig('/opt/feature_map.png')
     plt.close()
     
-    basic_visualize(input_tensor.cpu(), cam_map.type(torch.FloatTensor).cpu(), save_path='/opt/smbsn.png')
-
+    basic_visualize(input_tensor, cam_map.type(torch.FloatTensor), save_path='/opt/smbsn.png')
+    
+    # 最后再次清理内存
+    torch.cuda.empty_cache()
     return None, None
 
 if __name__ == '__main__':
     # 示例使用
     model_path = '../../ckpt/MMBSN_SIDD_o_a45.pth'
+    # test_image = '../../dataset/test_data/0001_18.png'
     test_image = '../../images/' + 'ILSVRC2012_val_00002193.JPEG'
-    
+
     # 加载模型
     model = load_model(model_path)
-    
+
     # 分析不同层的感受野
     layers_to_analyze = [
-        'branch1_1',  # 尝试不同的目标层
-        # 'bsn.branch1_1.conv1',
-        # 'bsn.branch1_1'
+        'branch1_1',  # 第一个去噪卷积层
     ]
-    
+
     for layer in layers_to_analyze:
+        # 每次分析前清理GPU内存
+        torch.cuda.empty_cache()
         print(f"\n分析层: {layer}")
-        result, cam_map = analyze_receptive_field(model, test_image, layer)
+        result, cam_map = analyze_attention_distribution(model, test_image, layer)
+        # 每次分析后清理GPU内存
+        torch.cuda.empty_cache()
         if result is not None:
             # 保存结果
             save_name = f'analysis/scorecam/results/{layer.replace(".", "_")}_analysis.png'
